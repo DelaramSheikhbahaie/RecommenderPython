@@ -117,6 +117,58 @@ dtf_train
 dtf_test = dtf_users.loc[:, split:]
 print("non-null data:", dtf_test[dtf_test>0].count().sum())
 dtf_test
+
+# Evaluate
+def mean_reciprocal_rank(y_test, predicted):
+    score = []
+    for product in y_test:
+        mrr = 1 / (list(predicted).index(product) + 1) if product in predicted else 0
+        score.append(mrr)
+    return np.mean(score)
+
+i = 1
+train = dtf_train.iloc[i].to_frame(name="y")
+test = dtf_test.iloc[i].to_frame(name="y")
+
+print("train:", len(train[~train["y"].isna()]), "| test:", len(test[~test["y"].isna()]))
+test.head()
+
+# add all products in test but empty
+tmp = test.copy()
+tmp["y"] = np.nan
+train = train.append(tmp)
+train.tail()
+
+# Model
+usr = train[["y"]].fillna(0).values.T
+prd = dtf_products.drop(["name","genres"],axis=1).values
+print("Users", usr.shape, " x  Products", prd.shape)
+
+## usr_ft(users,fatures) = usr(users,products) x prd(products,features)
+usr_ft = np.dot(usr, prd)
+## normalize
+weights = usr_ft / usr_ft.sum()
+## predicted rating(users,products) = weights(users,fatures) x prd.T(features,products)
+pred = np.dot(weights, prd.T)
+
+test = test.merge(pd.DataFrame(pred[0], columns=["yhat"]), how="left", left_index=True, right_index=True).reset_index()
+test = test[~test["y"].isna()]
+test
+
+print("--- user", i, "---")
+
+top = 5
+y_test = test.sort_values("y", ascending=False)["product"].values[:top]
+print("y_test:", y_test)
+
+predicted = test.sort_values("yhat", ascending=False)["product"].values[:top]
+print("predicted:", predicted)
+
+true_positive = len(list(set(y_test) & set(predicted)))
+print("true positive:", true_positive, "("+str(round(true_positive/top*100,1))+"%)")
+print("accuracy:", str(round(metrics.accuracy_score(y_test,predicted)*100,1))+"%")
+print("mrr:", round(mean_reciprocal_rank(y_test, predicted),2))
+
 ##colabrative filtering
 train = dtf_train.stack(dropna=True).reset_index().rename(columns={0:"y"})
 train.head()
@@ -165,15 +217,15 @@ def utils_plot_keras_training(training):
     ax11.set_ylabel("Score", color='steelblue')
     ax11.legend()
 
-    ## validation
-    ax[1].set(title="Validation")
-    ax22 = ax[1].twinx()
-    ax[1].plot(training.history['val_loss'], color='black')
-    ax[1].set_xlabel('Epochs')
-    ax[1].set_ylabel('Loss', color='black')
-    for metric in metrics:
-        ax22.plot(training.history['val_'+metric], label=metric)
-    ax22.set_ylabel("Score", color="steelblue")
+    # ## validation
+    # ax[1].set(title="Validation")
+    # ax22 = ax[1].twinx()
+    # ax[1].plot(training.history['val_loss'], color='black')
+    # ax[1].set_xlabel('Epochs')
+    # ax[1].set_ylabel('Loss', color='black')
+    # for metric in metrics:
+    #     ax22.plot(training.history['val_'+metric], label=metric)
+    # ax22.set_ylabel("Score", color="steelblue")
     plt.show()
 
     # train
@@ -205,9 +257,9 @@ predicted = test[test["user"]==i].sort_values("yhat", ascending=False)["product"
 print("predicted:", predicted)
 
 true_positive = len(list(set(y_test) & set(predicted)))
-print("true positive:", true_positive, "("+str(round(true_positive/top*100,1))+"%)")
-print("accuracy:", str(round(metrics.accuracy_score(y_test,predicted)*100,1))+"%")
-# print("mrr:", round(mean_reciprocal_rank(y_test, predicted),2))
+print("true positive:", true_positive, "("+str(round(true_positive/top*100, 1))+"%)")
+print("accuracy:", str(round(metrics.accuracy_score(y_test, predicted)*100, 1))+"%")
+print("mrr:", round(mean_reciprocal_rank(y_test, predicted),2))
 
 test[test["user"]==i].merge(
         dtf_products[["name","old","genres"]], left_on="product", right_index=True
@@ -291,7 +343,7 @@ print("predicted:", predicted)
 true_positive = len(list(set(y_test) & set(predicted)))
 print("true positive:", true_positive, "("+str(round(true_positive/top*100,1))+"%)")
 print("accuracy:", str(round(metrics.accuracy_score(y_test,predicted)*100,1))+"%")
-# print("mrr:", round(mean_reciprocal_rank(y_test, predicted),2))
+print("mrr:", round(mean_reciprocal_rank(y_test, predicted),2))
 
 test[test["user"]==i].merge(
         dtf_products[["name","old","genres"]], left_on="product", right_index=True
